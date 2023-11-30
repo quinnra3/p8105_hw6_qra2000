@@ -7,6 +7,7 @@ output: github_document
 
 ```{r setup, include=FALSE}
 library(tidyverse)
+library(modelr)
 
 knitr::opts_chunk$set(
 	echo = TRUE,
@@ -15,22 +16,31 @@ knitr::opts_chunk$set(
   fig.height = 6,
   out.width = "90%")
 
-theme_set(
-  theme_minimal() +
-  theme(legend.position = "bottom", plot.title = element_text(hjust = 0.5)))
+theme_set(theme(legend.position = "bottom", plot.title = element_text(hjust = 0.5)))
 
 options(
   ggplot2.continuous.colour = "viridis",
   ggplot2.continuous.fill = "viridis")
-
-scale_colour_discrete = scale_colour_viridis_d
-scale_fill_discrete = scale_fill_viridis_d
 
 set.seed(1)
 ```
 
 
 ## Problem 2
+
+1. Focus on a simple linear regression with tmax as the response with tmin and prcp as the predictors, and are interested in the distribution of two quantities estimated from these data:
+
+r^2
+log(β^1∗β^2)
+
+2. Use 5000 bootstrap samples and, for each bootstrap sample, produce estimates of these two quantities. 
+
+3. Plot the distribution of your estimates, and describe these in words.
+
+4. Using the 5000 bootstrap estimates, identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval for r^2
+ and log(β^0∗β^1)
+
+
 
 Load and tidy the Central Park weather data from class:
 
@@ -48,10 +58,99 @@ weather_df =
   select(name, id, everything())
 ```
 
+Now, fit linear regression to the data set. 
+
+```{r, eval=FALSE}
+weather_lm = weather_df |> lm(btw ~ tmax * tmin * prcp, data = weather_df)
+```
 
 
+## Problem 3
 
+First, we load and clean the data for regression analysis and convert the `babysex`, `frace`, and `mrace` variables to factor variables.
 
+```{r}
+bwt_df = read.csv("./data/birthweight.csv") |> 
+  mutate(
+    babysex = as.factor(case_when(babysex == 1 ~ "male",
+                                  babysex == 2 ~ "female")),
+    frace = as.factor(case_when(frace == 1 ~ "White",
+                                frace == 2 ~ "Black",
+                                frace == 3 ~ "Asian",
+                                frace == 4 ~ "Puerto Rican",
+                                frace == 8 ~ "Other",
+                                frace == 9 ~ "Unknown")),
+    mrace = as.factor(case_when(mrace == 1 ~ "White",
+                                mrace == 2 ~ "Black",
+                                mrace == 3 ~ "Asian",
+                                mrace == 4 ~ "Puerto Rican",
+                                mrace == 8 ~ "Other")))
+```
 
+Next, we propose a regression model based on a hypothesized structure for the factors that underly birthweight. My variables of interest are: family monthly income (in hundreds, rounded), average number of cigarettes smoked per day during pregnancy, and mother's weight gain during pregnancy (pounds).
 
+We fit the simple linear regression to the dataset, summarize model estimates, and plot the model residuals against fitted values. 
+
+```{r}
+fit_1 = lm(bwt ~ fincome + smoken + wtgain + mrace, data = bwt_df)
+
+fit_1 |> broom::tidy() |> knitr::kable(digits = 3)
+
+bwt_df |> 
+  add_predictions(fit_1) |> 
+  add_residuals(fit_1) |> 
+  ggplot(aes(x = pred, y = resid)) + 
+  geom_point() + 
+  geom_smooth(se = FALSE, method = "lm", color = "red")
+```
+
+The plot shows there is a symmetric distribution above and below the line y = 0. This indicates that this is a normal distribution, so we proceed with the linear regression analysis. 
+
+Next, we compare this model to two others: one using length at birth and gestational age as predictors, and one using head circumference, length, sex, and all interactions (including the three-way interaction) between these. We will make this comparison in terms of the cross-validated prediction error. 
+
+```{r}
+cv_df =
+  crossv_mc(bwt_df, 100) |> 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble))
+
+cv_df = 
+  cv_df |> 
+  mutate(
+    fit_1 = map(train, \(df) lm(bwt ~ fincome * smoken * wtgain, data = df)),
+    fit_2 = map(train, \(df) lm(bwt ~ blength + gaweeks, data = df)),
+    fit_3 = map(train, \(df) lm(bwt ~ bhead * blength * babysex, data = df))) |> 
+  mutate(
+    rmse_fit_1 = map2_dbl(fit_1, test, \(mod, df) rmse(model = mod, data = df)),
+    rmse_fit_2 = map2_dbl(fit_2, test, \(mod, df) rmse(model = mod, data = df)),
+    rmse_fit_3 = map2_dbl(fit_3, test, \(mod, df) rmse(model = mod, data = df)))
+```
+
+Next, we will display the RMSE results.
+
+```{r}
+cv_df |> 
+  summarize(
+    fit_1_mean_error = mean(rmse_fit_1),
+    fit_2_mean_error = mean(rmse_fit_2),
+    fit_3_mean_error = mean(rmse_fit_3)
+  ) |> 
+  knitr::kable(digits = 3)
+```
+
+The plot below shows the RMSE results in a violin plot:
+
+```{r}
+cv_df |> 
+  select(starts_with("rmse")) |> 
+  pivot_longer(
+    everything(),
+    names_to = "model",
+    values_to = "rmse",
+    names_prefix = "rmse ") |> 
+  mutate(model = fct_inorder(model)) |> 
+  ggplot(aes(x = model, y = rmse)) + 
+  geom_violin()
+```
 
