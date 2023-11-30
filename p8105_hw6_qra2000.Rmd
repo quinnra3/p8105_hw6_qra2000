@@ -87,7 +87,7 @@ bwt_df = read.csv("./data/birthweight.csv") |>
                                 mrace == 8 ~ "Other")))
 ```
 
-Next, we propose a regression model based on a hypothesized structure for the factors that underly birthweight. My variables of interest are: family monthly income (in hundreds, rounded), average number of cigarettes smoked per day during pregnancy, and mother's weight gain during pregnancy (pounds).
+Next, we propose a regression model based on a hypothesized structure for the factors that underly birthweight. My variables of interest are: family monthly income (in hundreds, rounded), average number of cigarettes smoked per day during pregnancy, mother's weight gain during pregnancy (pounds), and mother's race. 
 
 We fit the simple linear regression to the dataset, summarize model estimates, and plot the model residuals against fitted values. 
 
