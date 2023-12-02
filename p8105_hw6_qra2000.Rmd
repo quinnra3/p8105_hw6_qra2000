@@ -25,24 +25,9 @@ options(
 set.seed(1)
 ```
 
-
 ## Problem 2
 
-1. Focus on a simple linear regression with tmax as the response with tmin and prcp as the predictors, and are interested in the distribution of two quantities estimated from these data:
-
-r^2
-log(β^1∗β^2)
-
-2. Use 5000 bootstrap samples and, for each bootstrap sample, produce estimates of these two quantities. 
-
-3. Plot the distribution of your estimates, and describe these in words.
-
-4. Using the 5000 bootstrap estimates, identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval for r^2
- and log(β^0∗β^1)
-
-
-
-Load and tidy the Central Park weather data from class:
+First, load and tidy the Central Park weather data from class.
 
 ```{r, results=FALSE}
 weather_df = 
@@ -58,11 +43,55 @@ weather_df =
   select(name, id, everything())
 ```
 
-Now, fit linear regression to the data set. 
+For this problem, we focus on a simple linear regression with `tmax` as the response with `tmin` and `prcp` as the predictors, and are interested in the distribution of two quantities estimated from these data: r^2 and log(beta_1 * beta_2)
 
-```{r, eval=FALSE}
-weather_lm = weather_df |> lm(btw ~ tmax * tmin * prcp, data = weather_df)
+The code chunk below draws 5000 samples and produces estimates of the two quantities noted above. The 2.5% and 97.5% quantiles are identified for both r^2 and log(beta_1 * beta_2). Please note, some estimates are negative for beta_2_hat, so the NAs were removed in order to produce the confidence intervals.
+
+```{r}
+bootstrap_weather = 
+  weather_df |> 
+  modelr::bootstrap(n = 5000) |> 
+  mutate(
+    models = map(strap, \(df) lm (tmax ~ tmin + prcp, data = df)),
+    tidy_results = map(models, broom::tidy),
+    glance_results = map(models, broom::glance)
+  ) |> 
+  select(tidy_results, glance_results, .id) |> 
+  unnest(tidy_results, glance_results) |> 
+  select(.id, term, estimate, r.squared) |> 
+  group_by(.id) |> 
+  summarize(
+    log_beta12 = log(estimate[2]) + log(estimate[3]),
+    r_squared = r.squared) |> 
+  distinct()
 ```
+
+The plot below is a distribution of log(beta_1 * beta_2). This distribution is skewed to the left.
+```{r}
+bootstrap_weather |> 
+  ggplot(aes(x = log_beta12)) + 
+  geom_density()
+```
+
+The plot below is a distribution of r^2. This is an approximately normal distribution that is slightly skewed to the right. 
+
+```{r}
+bootstrap_weather |> 
+  ggplot(aes(x = r_squared)) + 
+  geom_density()
+```
+
+Below is a 95% condifence interval for r^2 Log(beta_1 * beta_2).
+
+```{r}
+tibble(
+    lower_beta = bootstrap_weather |> pull(log_beta12) |> quantile(0.025, na.rm = TRUE),
+    upper_beta = bootstrap_weather |> pull(log_beta12) |> quantile(0.975, na.rm = TRUE),
+    lower_r2 = bootstrap_weather |> pull(r_squared) |> quantile(0.025, na.rm = TRUE),
+    upper_r2 = bootstrap_weather |> pull(r_squared) |> quantile(0.975, na.rm = TRUE)) |> 
+  knitr::kable(digits = 2)
+```
+
 
 
 ## Problem 3
@@ -106,7 +135,7 @@ bwt_df |>
 
 The plot shows there is a symmetric distribution above and below the line y = 0. This indicates that this is a normal distribution, so we proceed with the linear regression analysis. 
 
-Next, we compare this model to two others: one using length at birth and gestational age as predictors, and one using head circumference, length, sex, and all interactions (including the three-way interaction) between these. We will make this comparison in terms of the cross-validated prediction error. 
+Next, we compare this model to two others: one using length at birth and gestational age as predictors, and one using head circumference, length, sex, and all interactions (including the three-way interaction) between these. We will make this comparison in terms of the cross-validated prediction error.
 
 ```{r}
 cv_df =
