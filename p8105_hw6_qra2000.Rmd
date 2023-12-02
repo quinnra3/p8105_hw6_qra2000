@@ -66,7 +66,7 @@ bootstrap_weather =
   distinct()
 ```
 
-The plot below is a distribution of log(beta_1 * beta_2). This distribution is skewed to the left.
+The plot below is a distribution of log(beta_1 * beta_2). This distribution is skewed to the right.
 ```{r}
 bootstrap_weather |> 
   ggplot(aes(x = log_beta12)) + 
